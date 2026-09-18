@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    plain_notepad_lib::run()
+    scratchpad_lib::run()
 }

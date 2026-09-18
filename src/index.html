@@ -3,45 +3,160 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Plain Notepad</title>
+    <title>Scratchpad</title>
     <link rel="stylesheet" href="styles.css" />
     <script type="module" src="main.js" defer></script>
   </head>
   <body>
-    <header class="toolbar">
-      <button type="button" id="btn-new" tabindex="-1" title="New tab (Ctrl+N)">New</button>
-      <button type="button" id="btn-open" tabindex="-1" title="Open (Ctrl+O)">Open</button>
-      <button type="button" id="btn-save" tabindex="-1" title="Save (Ctrl+S)">Save</button>
-      <button type="button" id="btn-save-as" tabindex="-1" title="Save As">Save As</button>
-      <span class="sep"></span>
-      <button type="button" id="btn-snap" tabindex="-1" title="Save snapshot vN in this thread">
-        Snap
-      </button>
-      <span id="snap-info" class="snap-info"></span>
-      <span class="spacer"></span>
-      <button type="button" id="btn-wrap" tabindex="-1" title="Toggle word wrap" aria-pressed="true">
-        Wrap
-      </button>
-      <label class="theme-label" title="Theme">
-        <select id="theme-select" tabindex="-1" aria-label="Theme">
-          <option value="light">Light</option>
-          <option value="dark">Dark</option>
-          <option value="system">System</option>
-        </select>
-      </label>
+    <!-- GNOME / Ubuntu Style Slim Headerbar with Integrated Window Controls -->
+    <header id="headerbar" class="headerbar" data-tauri-drag-region>
+      <div class="header-left">
+        <button type="button" id="btn-open" class="btn btn-pill" title="Open file (Ctrl+O)">
+          <span>Open</span>
+          <span class="chevron">▾</span>
+        </button>
+        <button type="button" id="btn-new" class="btn btn-icon" title="New tab (Ctrl+N)">
+          <span class="icon-plus">+</span>
+        </button>
+        <button type="button" id="btn-save" class="btn btn-pill" title="Save file (Ctrl+S)">
+          <span>Save</span>
+        </button>
+      </div>
+
+      <div class="header-spacer" data-tauri-drag-region></div>
+
+      <div class="header-right">
+        <button type="button" id="btn-snap" class="btn btn-pill" title="Save snapshot vN in this thread">
+          <span>Snap</span>
+        </button>
+        <button type="button" id="btn-corrections" class="btn btn-pill btn-highlight" title="Transcription Corrections Log">
+          <span>Corrections</span>
+          <span id="corr-badge" class="badge">0</span>
+        </button>
+        <div class="menu-wrapper">
+          <button type="button" id="btn-menu" class="btn btn-icon" title="Menu & Settings" aria-label="Menu">
+            <span>⋮</span>
+          </button>
+          <div id="app-menu" class="menu-dropdown hidden">
+            <button type="button" class="menu-item" id="menu-save-as">Save As... <span class="shortcut">Ctrl+Shift+S</span></button>
+            <button type="button" class="menu-item" id="menu-wrap"><span id="menu-wrap-text">Word Wrap: On</span> <span class="shortcut">Alt+Z</span></button>
+            <button type="button" class="menu-item" id="menu-dc-toggle"><span id="menu-dc-text">Trigger: Ctrl+Double-Click</span></button>
+            <hr class="menu-divider" />
+            <div class="menu-row">
+              <span class="menu-row-label">Theme:</span>
+              <select id="theme-select" class="theme-select" aria-label="Theme">
+                <option value="light">Light</option>
+                <option value="dark">Dark</option>
+                <option value="system">System</option>
+              </select>
+            </div>
+            <div class="menu-row">
+              <span class="menu-row-label">Font Size:</span>
+              <div class="font-controls">
+                <button type="button" id="btn-font-dec" class="btn-micro" title="Decrease font">-</button>
+                <span id="font-size-label" class="font-label">14px</span>
+                <button type="button" id="btn-font-inc" class="btn-micro" title="Increase font">+</button>
+              </div>
+            </div>
+            <hr class="menu-divider" />
+            <button type="button" class="menu-item" id="menu-view-corrections">View Corrections Log</button>
+          </div>
+        </div>
+
+        <!-- Integrated GNOME Window Controls -->
+        <div class="window-controls">
+          <button type="button" id="win-btn-min" class="win-btn" title="Minimize" aria-label="Minimize">
+            <span>−</span>
+          </button>
+          <button type="button" id="win-btn-max" class="win-btn" title="Maximize / Restore" aria-label="Maximize">
+            <span>□</span>
+          </button>
+          <button type="button" id="win-btn-close" class="win-btn win-close" title="Close" aria-label="Close">
+            <span>✕</span>
+          </button>
+        </div>
+      </div>
     </header>
 
-    <nav id="tabs" class="tabs" aria-label="Open files"></nav>
+    <!-- Ubuntu Style Tab Strip -->
+    <nav id="tabs" class="tabs-bar" aria-label="Open files"></nav>
 
-    <textarea
-      id="editor"
-      spellcheck="false"
-      autocomplete="off"
-      autocorrect="off"
-      autocapitalize="off"
-      wrap="soft"
-    ></textarea>
+    <!-- Main Editor -->
+    <main class="editor-wrap">
+      <textarea
+        id="editor"
+        spellcheck="false"
+        autocomplete="off"
+        autocorrect="off"
+        autocapitalize="off"
+        wrap="soft"
+        placeholder="Write or paste text here... (Ctrl + Double-click any word to correct transcription)"
+      ></textarea>
+    </main>
 
-    <footer id="status" class="status"></footer>
+    <!-- Footer Status -->
+    <footer id="status" class="status-bar"></footer>
+
+    <!-- Transcription Correction Modal -->
+    <div id="corr-modal" class="modal-backdrop hidden">
+      <div class="modal-window" role="dialog" aria-labelledby="corr-modal-title">
+        <div class="modal-header">
+          <h3 id="corr-modal-title" class="modal-title">Transcription Correction</h3>
+          <button type="button" id="corr-close-btn" class="modal-close-btn" title="Cancel (Esc)">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label">Original Word:</label>
+            <div id="corr-orig-word" class="word-badge"></div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="corr-new-word">Corrected Word:</label>
+            <input type="text" id="corr-new-word" class="form-input" placeholder="Type correction here..." autocomplete="off" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Context (Full Paragraph):</label>
+            <div id="corr-context" class="context-preview"></div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" id="corr-btn-cancel" class="btn btn-secondary">Cancel (Esc)</button>
+          <button type="button" id="corr-btn-save" class="btn btn-primary">Apply & Save (Enter)</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Corrections History Log Modal -->
+    <div id="history-modal" class="modal-backdrop hidden">
+      <div class="modal-window modal-window-large" role="dialog" aria-labelledby="history-modal-title">
+        <div class="modal-header">
+          <h3 id="history-modal-title" class="modal-title">Transcription Corrections Log</h3>
+          <button type="button" id="history-close-btn" class="modal-close-btn" title="Close">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="history-controls">
+            <span id="history-summary" class="history-summary">0 corrections saved</span>
+            <div class="history-actions">
+              <button type="button" id="btn-export-json" class="btn btn-pill">Export JSON</button>
+              <button type="button" id="btn-export-csv" class="btn btn-pill">Export CSV</button>
+              <button type="button" id="btn-clear-corrections" class="btn btn-danger-pill">Clear All</button>
+            </div>
+          </div>
+          <div class="table-container">
+            <table class="corrections-table">
+              <thead>
+                <tr>
+                  <th style="width: 15%">Original</th>
+                  <th style="width: 15%">Corrected</th>
+                  <th style="width: 50%">Context (Paragraph)</th>
+                  <th style="width: 20%">Date & Time</th>
+                </tr>
+              </thead>
+              <tbody id="corrections-tbody">
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
   </body>
 </html>
