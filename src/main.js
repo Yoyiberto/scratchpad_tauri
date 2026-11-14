@@ -36,9 +36,13 @@ let tabs = [];
 /** @type {number} */
 let activeId = 0;
 /** @type {'light'|'dark'|'system'} */
-let themePref = "light";
+let themePref = "system";
 let fontSize = FONT_DEFAULT;
 let systemDarkMq = null;
+
+if (typeof window !== "undefined" && window.matchMedia) {
+  systemDarkMq = window.matchMedia("(prefers-color-scheme: dark)");
+}
 let dataDir = "";
 let notesDir = "";
 let backupTimer = 0;
@@ -196,26 +200,68 @@ function updateHeaderDocInfo() {
   }
 }
 
+function getSystemTheme() {
+  if (typeof window !== "undefined" && window.matchMedia) {
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  }
+  return "light";
+}
+
+function resolveCurrentTheme() {
+  return themePref === "system" ? getSystemTheme() : themePref;
+}
+
+function updateThemeUI() {
+  if (typeof document === "undefined") return;
+  const current = themePref;
+  const effective = resolveCurrentTheme();
+
+  if (el.themeSelect) el.themeSelect.value = current;
+
+  document.querySelectorAll(".theme-btn").forEach((btn) => {
+    const val = btn.getAttribute("data-theme-val");
+    if (val === current) {
+      btn.classList.add("active");
+      btn.setAttribute("aria-checked", "true");
+    } else {
+      btn.classList.remove("active");
+      btn.setAttribute("aria-checked", "false");
+    }
+  });
+
+  const indicator = document.getElementById("theme-indicator-icon");
+  if (indicator) {
+    if (current === "system") {
+      indicator.textContent = effective === "dark" ? "💻" : "💻";
+      indicator.title = `Modo Sistema (activo: ${effective === "dark" ? "oscuro" : "claro"})`;
+    } else if (current === "dark") {
+      indicator.textContent = "🌙";
+      indicator.title = "Modo Noche (Dark)";
+    } else {
+      indicator.textContent = "☀️";
+      indicator.title = "Modo Normal Sol (Light)";
+    }
+  }
+}
+
 function applyTheme() {
-  const resolved =
-    themePref === "system"
-      ? systemDarkMq?.matches
-        ? "dark"
-        : "light"
-      : themePref;
-  document.documentElement.setAttribute("data-theme", resolved);
+  const resolved = resolveCurrentTheme();
+  if (typeof document !== "undefined") {
+    document.documentElement.setAttribute("data-theme", resolved);
+  }
+  updateThemeUI();
 }
 
 function loadSettings() {
-  const t = localStorage.getItem("theme");
+  const t = typeof localStorage !== "undefined" ? localStorage.getItem("theme") : null;
   if (t === "light" || t === "dark" || t === "system") themePref = t;
-  else themePref = "light";
+  else themePref = "system";
 
-  const fs = Number(localStorage.getItem("fontSize"));
+  const fs = typeof localStorage !== "undefined" ? Number(localStorage.getItem("fontSize")) : NaN;
   fontSize =
     Number.isFinite(fs) && fs >= FONT_MIN && fs <= FONT_MAX ? fs : FONT_DEFAULT;
 
-  const tm = localStorage.getItem("triggerMode");
+  const tm = typeof localStorage !== "undefined" ? localStorage.getItem("triggerMode") : null;
   if (tm === "dblclick" || tm === "ctrl_dblclick") triggerMode = tm;
 
   if (el.themeSelect) el.themeSelect.value = themePref;
@@ -224,31 +270,52 @@ function loadSettings() {
     el.menuDcText.textContent = triggerMode === "ctrl_dblclick" ? "Trigger: Ctrl+Double-Click" : "Trigger: Double-Click";
   }
 
-  document.documentElement.style.setProperty(
-    "--editor-font-size",
-    `${fontSize}px`,
-  );
+  if (typeof document !== "undefined") {
+    document.documentElement.style.setProperty(
+      "--editor-font-size",
+      `${fontSize}px`,
+    );
+  }
   applyTheme();
 }
 
 function setTheme(pref) {
+  if (pref !== "light" && pref !== "dark" && pref !== "system") return;
   themePref = pref;
-  localStorage.setItem("theme", pref);
-  if (el.themeSelect) el.themeSelect.value = pref;
+  if (typeof localStorage !== "undefined") {
+    localStorage.setItem("theme", pref);
+  }
   applyTheme();
 }
 
 function setFontSize(size) {
   fontSize = Math.min(FONT_MAX, Math.max(FONT_MIN, size));
-  localStorage.setItem("fontSize", String(fontSize));
-  document.documentElement.style.setProperty(
-    "--editor-font-size",
-    `${fontSize}px`,
-  );
+  if (typeof localStorage !== "undefined") {
+    localStorage.setItem("fontSize", String(fontSize));
+  }
+  if (typeof document !== "undefined") {
+    document.documentElement.style.setProperty(
+      "--editor-font-size",
+      `${fontSize}px`,
+    );
+  }
   if (el.fontSizeLabel) el.fontSizeLabel.textContent = `${fontSize}px`;
   const tab = active();
   const path = tab?.path || "(unsaved)";
   setStatus(`${displayTitle(tab)}  —  ${path}  ·  ${fontSize}px`);
+}
+
+function handleWheelZoom(e) {
+  if (e.ctrlKey || e.metaKey) {
+    if (typeof e.preventDefault === "function") {
+      e.preventDefault();
+    }
+    if (e.deltaY < 0) {
+      setFontSize(fontSize + 1);
+    } else if (e.deltaY > 0) {
+      setFontSize(fontSize - 1);
+    }
+  }
 }
 
 function toggleTriggerMode() {
@@ -525,35 +592,45 @@ async function saveSnapshot() {
   }
 
   const ext = tab.path ? extFromPath(tab.path) : ".txt";
+  // Sin diálogo: las notas nuevas viven en notes/; las abiertas, en su carpeta.
+  const dir = tab.path ? dirFromPath(tab.path) : notesDir || dataDir;
 
-  let dir;
-  if (tab.path) {
-    dir = dirFromPath(tab.path);
-  } else {
-    const pick = await save({
-      defaultPath: joinPath(notesDir || dataDir, `${tab.threadBase}_v1.txt`),
-      filters: FILE_FILTERS,
-      title: "Choose folder for this snapshot thread",
-    });
-    if (!pick) return;
-    dir = dirFromPath(pick);
-    const pickedBase = stemFromPath(ensureDefaultExt(pick)).replace(
-      /_v\d+$/i,
-      "",
-    );
-    if (pickedBase) tab.threadBase = pickedBase;
+  // No duplicar: si el último snapshot es idéntico, solo guardamos el archivo.
+  const last = await invoke("latest_snap_n", { dir, base: tab.threadBase });
+  let same = false;
+  if (last > 0) {
+    try {
+      const prev = await invoke("read_text", {
+        path: joinPath(dir, `${tab.threadBase}_v${last}${ext}`),
+      });
+      same = prev === tab.content;
+    } catch {}
   }
 
-  const n = await invoke("next_snap_n", { dir, base: tab.threadBase });
-  const snapPath = joinPath(dir, `${tab.threadBase}_v${n}${ext}`);
-  await invoke("write_text", { path: snapPath, contents: tab.content });
+  let n = last;
+  if (!same) {
+    n = last + 1;
+    await invoke("write_text", {
+      path: joinPath(dir, `${tab.threadBase}_v${n}${ext}`),
+      contents: tab.content,
+    });
+  }
   tab.snapN = n;
 
-  if (!tab.path) {
+  // Snap = checkpoint + guardar: la pestaña queda limpia (no "dirty").
+  // Si el archivo abierto era un _vN, nunca se sobrescribe: se trabaja sobre la base.
+  if (!tab.path || /_v\d+$/i.test(stemFromPath(tab.path))) {
     tab.path = joinPath(dir, `${tab.threadBase}${ext}`);
-    await invoke("write_text", { path: tab.path, contents: tab.content });
-    tab.saved = tab.content;
-    tab.title = `${tab.threadBase}${ext}`;
+    tab.title = fileName(tab.path);
+  }
+  await invoke("write_text", { path: tab.path, contents: tab.content });
+  tab.saved = tab.content;
+  if (same) {
+    renderTabs();
+    syncEditorFromTab();
+    setStatus(`Sin cambios desde v${n} — guardado`);
+    backupSession();
+    return;
   }
 
   renderTabs();
@@ -803,13 +880,37 @@ function bind() {
   el.btnSnap?.addEventListener("click", () => saveSnapshot());
   el.btnCorrections?.addEventListener("click", () => openHistoryModal());
 
-  // Window Controls (GNOME CSD)
+  // Window Controls (GNOME CSD) & Window Dragging
+  function isInteractive(target) {
+    return !!target.closest("button, select, input, textarea, .menu-dropdown, .tab, a");
+  }
+
+  el.headerbar?.addEventListener("mousedown", (e) => {
+    if (e.button === 0 && !isInteractive(e.target)) {
+      invoke("win_start_dragging");
+    }
+  });
+
+  el.tabs?.addEventListener("mousedown", (e) => {
+    if (e.button === 0 && !isInteractive(e.target)) {
+      invoke("win_start_dragging");
+    }
+  });
+
   el.winBtnMin?.addEventListener("click", () => invoke("win_minimize"));
   el.winBtnMax?.addEventListener("click", () => invoke("win_toggle_maximize"));
   el.winBtnClose?.addEventListener("click", () => invoke("win_close"));
   el.headerbar?.addEventListener("dblclick", (e) => {
-    if (e.target.closest("button") || e.target.closest("select") || e.target.closest("input")) return;
+    if (isInteractive(e.target)) return;
     invoke("win_toggle_maximize");
+  });
+
+  // Theme buttons (☀️ Light, 🌙 Dark, 💻 System)
+  document.querySelectorAll(".theme-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const val = btn.getAttribute("data-theme-val");
+      if (val) setTheme(val);
+    });
   });
 
   // Menu dropdown
@@ -956,10 +1057,24 @@ function bind() {
     }
   });
 
-  systemDarkMq = window.matchMedia("(prefers-color-scheme: dark)");
-  systemDarkMq.addEventListener("change", () => {
-    if (themePref === "system") applyTheme();
-  });
+  // Zoom with Ctrl / Cmd + Mouse Wheel
+  window.addEventListener("wheel", handleWheelZoom, { passive: false });
+
+  if (typeof window !== "undefined" && window.matchMedia) {
+    systemDarkMq = window.matchMedia("(prefers-color-scheme: dark)");
+    const onSystemThemeChange = () => {
+      if (themePref === "system") applyTheme();
+    };
+    if (systemDarkMq.addEventListener) {
+      systemDarkMq.addEventListener("change", onSystemThemeChange);
+    } else if (systemDarkMq.addListener) {
+      systemDarkMq.addListener(onSystemThemeChange);
+    }
+
+    window.addEventListener("focus", () => {
+      if (themePref === "system") applyTheme();
+    });
+  }
 
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "hidden") backupSession();
@@ -1007,6 +1122,10 @@ if (typeof window !== "undefined") {
   });
 }
 
+function getFontSize() {
+  return fontSize;
+}
+
 export {
   fileName,
   stemFromPath,
@@ -1025,4 +1144,13 @@ export {
   FONT_MIN,
   FONT_MAX,
   FONT_DEFAULT,
+  setFontSize,
+  handleWheelZoom,
+  getFontSize,
+  themePref,
+  setTheme,
+  applyTheme,
+  getSystemTheme,
+  resolveCurrentTheme,
+  updateThemeUI,
 };

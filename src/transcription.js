@@ -91,19 +91,15 @@ export function findParagraphAtPosition(text, position) {
   if (!text) return "";
   const pos = Math.max(0, Math.min(position, text.length));
 
-  // Find start of paragraph (after previous double newline)
-  let start = text.lastIndexOf("\n\n", pos);
-  if (start === -1) {
-    start = 0;
-  } else {
-    start += 2; // Move past \n\n
-  }
+  // Find start of paragraph (after previous double newline \n\n or \r\n\r\n)
+  const before = text.slice(0, pos);
+  const startMatch = [...before.matchAll(/(?:\r?\n){2,}/g)].pop();
+  const start = startMatch ? startMatch.index + startMatch[0].length : 0;
 
   // Find end of paragraph (before next double newline)
-  let end = text.indexOf("\n\n", pos);
-  if (end === -1) {
-    end = text.length;
-  }
+  const after = text.slice(pos);
+  const endMatch = after.match(/(?:\r?\n){2,}/);
+  const end = endMatch ? pos + endMatch.index : text.length;
 
   const paragraph = text.slice(start, end).trim();
   return paragraph;

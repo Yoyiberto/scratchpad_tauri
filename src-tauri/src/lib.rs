@@ -1,7 +1,24 @@
 use std::fs;
 use std::path::Path;
 
-use tauri::{LogicalPosition, LogicalSize, Manager, Position, Size};
+use tauri::{Manager, PhysicalPosition, PhysicalSize, RunEvent, WebviewWindow};
+
+fn log(msg: &str) {
+    use std::io::Write;
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    println!("[{ts}] {msg}");
+    let path = if cfg!(windows) {
+        std::path::PathBuf::from("C:\\Tools\\scratchpad_events.txt")
+    } else {
+        std::env::temp_dir().join("scratchpad_events.txt")
+    };
+    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+        let _ = writeln!(f, "[{ts}] {msg}");
+    }
+}
 
 #[tauri::command]
 fn read_text(path: String) -> Result<String, String> {
@@ -75,12 +92,21 @@ fn app_data_dir(app: tauri::AppHandle) -> Result<String, String> {
     };
     fs::create_dir_all(dir.join("notes")).map_err(|e| e.to_string())?;
 
-    // Auto-migrate from previous plain-notepad directory if present
+    // Auto-migrate from previous plain-notepad directory if present (Windows & Linux)
+    let mut potential_old_dirs = Vec::new();
+    if let Ok(base) = std::env::var("LOCALAPPDATA") {
+        potential_old_dirs.push(std::path::PathBuf::from(&base).join("plain-notepad"));
+        potential_old_dirs.push(std::path::PathBuf::from(&base).join("com.ramse.plain-notepad"));
+    }
     if let Ok(home) = std::env::var("HOME") {
-        let old_dir = std::path::PathBuf::from(home)
-            .join(".local")
-            .join("share")
-            .join("com.ramse.plain-notepad");
+        potential_old_dirs.push(
+            std::path::PathBuf::from(home)
+                .join(".local")
+                .join("share")
+                .join("com.ramse.plain-notepad"),
+        );
+    }
+    for old_dir in potential_old_dirs {
         if old_dir.exists() {
             let old_session = old_dir.join("session.json");
             let new_session = dir.join("session.json");
@@ -98,30 +124,58 @@ fn app_data_dir(app: tauri::AppHandle) -> Result<String, String> {
     Ok(dir.to_string_lossy().into_owned())
 }
 
-/// Thin window docked to the right side of the current monitor.
-fn place_right_half(window: &tauri::WebviewWindow) {
-    let Ok(Some(monitor)) = window.current_monitor() else {
-        return;
+/// Ventana acoplada al lateral derecho del área de trabajo (sin barra de tareas)
+/// del monitor actual. Todo en píxeles FÍSICOS para no mezclar escalas.
+fn place_right_side(window: &WebviewWindow) -> tauri::Result<()> {
+    let monitor = match window.current_monitor()? {
+        Some(m) => Some(m),
+        None => window.primary_monitor()?,
     };
+    let Some(monitor) = monitor else {
+        log("no monitor found -> center()");
+        return window.center();
+    };
+
     let scale = monitor.scale_factor();
-    let msize = monitor.size();
-    let mpos = monitor.position();
-    let sw = msize.width as f64 / scale;
-    let sh = msize.height as f64 / scale;
-    let mx = mpos.x as f64 / scale;
-    let my = mpos.y as f64 / scale;
+    let wa = monitor.work_area();
+    let (ax, ay) = (wa.position.x, wa.position.y);
+    let (aw, ah) = (wa.size.width as i32, wa.size.height as i32);
+    let margin = (12.0 * scale).round() as i32;
 
-    // ~42% of screen width, capped so it stays clearly under half
-    let w = (sw * 0.42).clamp(400.0, 560.0);
-    let h = (sh * 0.88).clamp(520.0, 980.0);
-    let x = mx + sw - w - 12.0;
-    let y = my + ((sh - h) * 0.5).max(20.0);
+    let w = ((aw as f64 * 0.42).clamp(400.0 * scale, 560.0 * scale) as i32)
+        .min(aw - 2 * margin)
+        .max(1);
+    let h = ((ah as f64 * 0.92).clamp(300.0 * scale, 980.0 * scale) as i32)
+        .min(ah - 2 * margin)
+        .max(1);
+    let x = ax + aw - w - margin;
+    let y = ay + (ah - h) / 2;
 
-    let _ = window.set_size(Size::Logical(LogicalSize {
-        width: w,
-        height: h,
-    }));
-    let _ = window.set_position(Position::Logical(LogicalPosition { x, y }));
+    log(&format!(
+        "monitor {:?} scale={scale} work_area=({ax},{ay},{aw}x{ah}) -> win=({x},{y},{w}x{h})",
+        monitor.name()
+    ));
+
+    window.set_size(PhysicalSize::new(w as u32, h as u32))?;
+    window.set_position(PhysicalPosition::new(x, y))?;
+    Ok(())
+}
+
+fn log_environment(app: &tauri::App) {
+    log(&format!(
+        "pid={} SESSIONNAME={:?} USERNAME={:?}",
+        std::process::id(),
+        std::env::var("SESSIONNAME").ok(),
+        std::env::var("USERNAME").ok()
+    ));
+    if let Ok(mons) = app.available_monitors() {
+        for m in mons {
+            log(&format!(
+                "monitor {:?} pos={:?} size={:?} scale={}",
+                m.name(), m.position(), m.size(), m.scale_factor()
+            ));
+        }
+    }
 }
 
 fn get_corrections_file_path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
@@ -187,19 +241,46 @@ fn win_toggle_maximize(window: tauri::WebviewWindow) {
 
 #[tauri::command]
 fn win_close(window: tauri::WebviewWindow) {
+    let _ = std::fs::write("C:\\Tools\\scratchpad_win_close.txt", "win_close was called!\n");
     let _ = window.close();
+}
+
+#[tauri::command]
+fn win_start_dragging(window: tauri::WebviewWindow) {
+    let _ = window.start_dragging();
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .on_window_event(|window, event| {
+            log(&format!("Window {:?} event: {:?}", window.label(), event));
+        })
         .setup(|app| {
-            if let Some(window) = app.get_webview_window("main") {
-                place_right_half(&window);
-                if let Some(icon) = app.default_window_icon() {
-                    let _ = window.set_icon(icon.clone());
+            log("setup running");
+            log_environment(app);
+            match app.get_webview_window("main") {
+                Some(window) => {
+                    if let Some(icon) = app.default_window_icon() {
+                        let _ = window.set_icon(icon.clone());
+                    }
+                    if let Err(e) = place_right_side(&window) {
+                        log(&format!("place_right_side error: {e}"));
+                        let _ = window.center();
+                    }
+                    let _ = window.unminimize();
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                    log(&format!(
+                        "after show: visible={:?} minimized={:?} pos={:?} size={:?}",
+                        window.is_visible(),
+                        window.is_minimized(),
+                        window.outer_position(),
+                        window.outer_size()
+                    ));
                 }
+                None => log("main window NOT found"),
             }
             Ok(())
         })
@@ -215,10 +296,17 @@ pub fn run() {
             get_test_screen,
             win_minimize,
             win_toggle_maximize,
-            win_close
+            win_close,
+            win_start_dragging
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    app.run(|_app, event| match event {
+        RunEvent::ExitRequested { code, .. } => log(&format!("RunEvent::ExitRequested code={code:?}")),
+        RunEvent::Exit => log("RunEvent::Exit"),
+        _ => {}
+    });
 }
 
 #[cfg(test)]

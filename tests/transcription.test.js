@@ -58,6 +58,13 @@ test("findParagraphAtPosition extracts the complete paragraph block", () => {
   );
 });
 
+test("findParagraphAtPosition extracts paragraphs correctly with Windows CRLF newlines", () => {
+  const crlfText = "Paragraph 1 line A\r\nParagraph 1 line B\r\n\r\nParagraph 2 with target word\r\n\r\nParagraph 3";
+  const posTarget = crlfText.indexOf("target");
+  const p = findParagraphAtPosition(crlfText, posTarget);
+  assert.equal(p, "Paragraph 2 with target word");
+});
+
 test("applyCorrectionToText replaces target word cleanly preserving surrounding punctuation", () => {
   const posQuitar = sampleText.indexOf("quitar");
   const match = findWordAtPosition(sampleText, posQuitar);

@@ -24,7 +24,7 @@
   --modal-bg: #ffffff;
   --modal-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
   --font-ui: system-ui, -apple-system, "Ubuntu", "Segoe UI", sans-serif;
-  --font-mono: "Ubuntu Sans Mono", "Ubuntu Mono", "DejaVu Sans Mono", monospace;
+  --font-mono: "Ubuntu Sans Mono", "Ubuntu Mono", "Cascadia Code", "Cascadia Mono", "Consolas", "DejaVu Sans Mono", monospace;
 }
 
 [data-theme="dark"] {
@@ -310,6 +310,85 @@ body {
   color: var(--text-muted);
 }
 
+.theme-menu-row {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 7px;
+  padding: 6px 10px;
+}
+
+.theme-switch-group {
+  display: flex;
+  background: var(--btn-hover);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2px;
+  gap: 2px;
+}
+
+.theme-btn {
+  flex: 1;
+  appearance: none;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 4px 6px;
+  cursor: pointer;
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.theme-btn:hover {
+  color: var(--text);
+  background: var(--btn-bg);
+}
+
+.theme-btn.active {
+  background: var(--btn-bg);
+  color: var(--accent);
+  border-color: var(--btn-border);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  font-weight: 600;
+}
+
+.theme-btn-icon {
+  font-size: 12px;
+  line-height: 1;
+}
+
+.theme-btn-text {
+  font-size: 11px;
+}
+
+.theme-indicator-icon {
+  display: inline-block;
+  font-size: 13px;
+  line-height: 1;
+  vertical-align: middle;
+  margin-right: 2px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
 .theme-select {
   appearance: none;
   background: var(--btn-bg);
@@ -472,6 +551,32 @@ body {
   white-space: pre-wrap;
   overflow-wrap: break-word;
   word-break: break-word;
+}
+
+#editor::-webkit-scrollbar,
+.table-container::-webkit-scrollbar,
+.modal-body::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+#editor::-webkit-scrollbar-track,
+.table-container::-webkit-scrollbar-track,
+.modal-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+#editor::-webkit-scrollbar-thumb,
+.table-container::-webkit-scrollbar-thumb,
+.modal-body::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+
+#editor::-webkit-scrollbar-thumb:hover,
+.table-container::-webkit-scrollbar-thumb:hover,
+.modal-body::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
 }
 
 /* ==================== Status Bar ==================== */

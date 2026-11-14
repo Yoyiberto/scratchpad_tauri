@@ -1,0 +1,5 @@
+# Los 3 proyectos Tauri (scratchpad, HTML_CV_Editor, draw) comparten target:
+# las ~430 dependencias de Tauri se compilan una sola vez para los tres.
+# Ojo: si dos compilan a la vez, uno espera al otro (lock de cargo).
+[build]
+target-dir = "C:/rust-target/tauri"

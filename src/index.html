@@ -4,6 +4,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Scratchpad</title>
+    <script>
+      (function() {
+        try {
+          var t = localStorage.getItem("theme") || "system";
+          var isDark = t === "dark" || (t === "system" && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+          document.documentElement.setAttribute("data-theme", isDark ? "dark" : "light");
+        } catch (e) {}
+      })();
+    </script>
     <link rel="stylesheet" href="styles.css" />
     <script type="module" src="main.js" defer></script>
   </head>
@@ -42,20 +51,37 @@
             <button type="button" class="menu-item" id="menu-wrap"><span id="menu-wrap-text">Word Wrap: On</span> <span class="shortcut">Alt+Z</span></button>
             <button type="button" class="menu-item" id="menu-dc-toggle"><span id="menu-dc-text">Trigger: Ctrl+Double-Click</span></button>
             <hr class="menu-divider" />
-            <div class="menu-row">
-              <span class="menu-row-label">Theme:</span>
-              <select id="theme-select" class="theme-select" aria-label="Theme">
-                <option value="light">Light</option>
-                <option value="dark">Dark</option>
-                <option value="system">System</option>
+            <div class="menu-row theme-menu-row">
+              <span class="menu-row-label">
+                <span id="theme-indicator-icon" class="theme-indicator-icon">☀️</span>
+                <span>Theme:</span>
+              </span>
+              <div class="theme-switch-group" role="radiogroup" aria-label="Theme selection">
+                <button type="button" class="theme-btn" data-theme-val="light" title="Modo Normal Sol (Light)" aria-label="Modo Normal Sol">
+                  <span class="theme-btn-icon">☀️</span>
+                  <span class="theme-btn-text">Light</span>
+                </button>
+                <button type="button" class="theme-btn" data-theme-val="dark" title="Modo Noche (Dark)" aria-label="Modo Noche">
+                  <span class="theme-btn-icon">🌙</span>
+                  <span class="theme-btn-text">Dark</span>
+                </button>
+                <button type="button" class="theme-btn" data-theme-val="system" title="Modo Sistema (Auto)" aria-label="Modo Sistema">
+                  <span class="theme-btn-icon">💻</span>
+                  <span class="theme-btn-text">System</span>
+                </button>
+              </div>
+              <select id="theme-select" class="theme-select sr-only" aria-label="Theme" style="display: none;">
+                <option value="light">☀️ Light</option>
+                <option value="dark">🌙 Dark</option>
+                <option value="system">💻 System</option>
               </select>
             </div>
             <div class="menu-row">
               <span class="menu-row-label">Font Size:</span>
               <div class="font-controls">
-                <button type="button" id="btn-font-dec" class="btn-micro" title="Decrease font">-</button>
+                <button type="button" id="btn-font-dec" class="btn-micro" title="Decrease font (Ctrl+- or Ctrl+Wheel Down)">-</button>
                 <span id="font-size-label" class="font-label">14px</span>
-                <button type="button" id="btn-font-inc" class="btn-micro" title="Increase font">+</button>
+                <button type="button" id="btn-font-inc" class="btn-micro" title="Increase font (Ctrl++ or Ctrl+Wheel Up)">+</button>
               </div>
             </div>
             <hr class="menu-divider" />
@@ -79,7 +105,7 @@
     </header>
 
     <!-- Ubuntu Style Tab Strip -->
-    <nav id="tabs" class="tabs-bar" aria-label="Open files"></nav>
+    <nav id="tabs" class="tabs-bar" aria-label="Open files" data-tauri-drag-region></nav>
 
     <!-- Main Editor -->
     <main class="editor-wrap">

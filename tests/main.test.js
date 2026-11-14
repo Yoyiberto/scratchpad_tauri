@@ -11,6 +11,15 @@ import {
   isDirty,
   createTab,
   defaultThreadBase,
+  handleWheelZoom,
+  setFontSize,
+  getFontSize,
+  FONT_MIN,
+  FONT_MAX,
+  FONT_DEFAULT,
+  setTheme,
+  resolveCurrentTheme,
+  getSystemTheme,
 } from "../src/main.js";
 
 test("fileName extracts file name correctly for both Linux and Windows paths", () => {
@@ -95,4 +104,83 @@ test("createTab creates a tab with default properties", () => {
   assert.equal(tab.wrap, true);
   assert.equal(tab.snapN, 0);
   assert.equal(typeof tab.id, "number");
+});
+
+test("setFontSize clamps font size between FONT_MIN and FONT_MAX", () => {
+  setFontSize(FONT_DEFAULT);
+  assert.equal(getFontSize(), FONT_DEFAULT);
+
+  setFontSize(FONT_MIN - 5);
+  assert.equal(getFontSize(), FONT_MIN);
+
+  setFontSize(FONT_MAX + 20);
+  assert.equal(getFontSize(), FONT_MAX);
+
+  setFontSize(16);
+  assert.equal(getFontSize(), 16);
+});
+
+test("handleWheelZoom zooms in on Ctrl+Wheel Up and zooms out on Ctrl+Wheel Down", () => {
+  setFontSize(16);
+
+  let prevented = false;
+  const zoomInEvent = {
+    ctrlKey: true,
+    metaKey: false,
+    deltaY: -100,
+    preventDefault: () => {
+      prevented = true;
+    },
+  };
+  handleWheelZoom(zoomInEvent);
+  assert.equal(prevented, true);
+  assert.equal(getFontSize(), 17);
+
+  prevented = false;
+  const zoomOutEvent = {
+    ctrlKey: true,
+    metaKey: false,
+    deltaY: 100,
+    preventDefault: () => {
+      prevented = true;
+    },
+  };
+  handleWheelZoom(zoomOutEvent);
+  assert.equal(prevented, true);
+  assert.equal(getFontSize(), 16);
+});
+
+test("handleWheelZoom ignores wheel events without Ctrl or Meta", () => {
+  setFontSize(16);
+
+  let prevented = false;
+  const regularScrollEvent = {
+    ctrlKey: false,
+    metaKey: false,
+    deltaY: -100,
+    preventDefault: () => {
+      prevented = true;
+    },
+  };
+  handleWheelZoom(regularScrollEvent);
+  assert.equal(prevented, false);
+  assert.equal(getFontSize(), 16);
+});
+
+test("setTheme updates theme setting and resolveCurrentTheme returns correct value", () => {
+  setTheme("dark");
+  assert.equal(resolveCurrentTheme(), "dark");
+
+  setTheme("light");
+  assert.equal(resolveCurrentTheme(), "light");
+
+  setTheme("system");
+  // in node environment without matchMedia, fallback is 'light'
+  assert.equal(resolveCurrentTheme(), "light");
+});
+
+test("setTheme rejects invalid theme values", () => {
+  setTheme("dark");
+  setTheme("invalid-theme");
+  assert.equal(resolveCurrentTheme(), "dark");
 });
